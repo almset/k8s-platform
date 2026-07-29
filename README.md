@@ -10,17 +10,13 @@ Ansible-фреймворк, который устанавливает/удаля
 ## Архитектура: 4 слоя ответственности
 
 ```
-CATALOG (catalog.yml)                       — ЧТО должно быть установлено
-    зависимости, драйвер, репозиторий/чарт, checks, events, rollback.strategy
+CATALOG (catalog.yml)       — ЧТО должно быть установлено зависимости, драйвер, репозиторий/чарт, checks, events, rollback.strategy
         ↓
 COMPONENT.YML (roles/platform/<name>/component.yml)
-    contract: — КАК компонент работает с движком
-        apiVersion, driver.enabled, phases.*.pre_driver/post_driver, events.*.pre/post
-    defaults: — ЗНАЧЕНИЯ конфигурации
-        replicas, resources, args, helm values
+    contract: — КАК компонент работает с движком apiVersion, driver.enabled, phases.*.pre_driver/post_driver, events.*.pre/post
+    defaults: — ЗНАЧЕНИЯ конфигурации replicas, resources, args, helm values
         ↓
-TASKS (roles/platform/<name>/tasks/*.yml)   — РЕАЛИЗАЦИЯ бизнес-логики
-    install_pre.yml / install_post.yml / cleanup_pre.yml / cleanup_post.yml
+TASKS (roles/platform/<name>/tasks/*.yml)   — РЕАЛИЗАЦИЯ бизнес-логики install_pre.yml / install_post.yml / cleanup_pre.yml / cleanup_post.yml
 ```
 
 `component.yml` загружается **явно** через `ansible.builtin.include_vars`
