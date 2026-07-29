@@ -1,0 +1,50 @@
+---
+- name: Load catalog
+  ansible.builtin.include_vars:
+    file: "{{ playbook_dir }}/catalog.yml"
+    name: catalog_root
+
+- name: Expose platform_catalog as a top-level fact
+  ansible.builtin.set_fact:
+    platform_catalog: "{{ catalog_root.platform_catalog }}"
+
+- name: Assert platform_action is valid
+  ansible.builtin.assert:
+    that:
+      - platform_action in ['plan', 'install', 'cleanup']
+    fail_msg: "platform_action must be 'plan', 'install' or 'cleanup', got '{{ platform_action }}'"
+
+- name: Resolve components and calculate execution order
+  ansible.builtin.include_tasks: resolve_and_sort.yml
+
+- name: Always show the execution plan before doing anything else
+  ansible.builtin.include_tasks: render_plan.yml
+
+- name: Stop here — only a plan was requested
+  ansible.builtin.meta: end_play
+  when: platform_action == 'plan'
+
+# Safety gate: printing the plan is not enough on its own to stop someone
+# running `-e platform_action=install` unattended and getting surprised.
+# Applying requires an explicit, separate opt-in.
+- name: Refuse to apply without explicit confirmation
+  ansible.builtin.fail:
+    msg: >-
+      Refusing to apply. Review the plan above, then re-run with
+      -e platform_action={{ platform_action }} -e platform_confirm=true
+      to proceed — or -e platform_action=plan to only view the plan.
+  when: not (platform_confirm | default(false) | bool)
+
+- name: Run install lifecycle
+  ansible.builtin.include_tasks: execute_lifecycle.yml
+  vars:
+    lifecycle_action: install
+    execution_order: "{{ execution_order_install }}"
+  when: platform_action == 'install'
+
+- name: Run cleanup lifecycle
+  ansible.builtin.include_tasks: execute_lifecycle.yml
+  vars:
+    lifecycle_action: cleanup
+    execution_order: "{{ execution_order_cleanup }}"
+  when: platform_action == 'cleanup'

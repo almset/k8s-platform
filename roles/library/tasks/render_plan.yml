@@ -1,0 +1,58 @@
+---
+# Execution plan, in the spirit of `terraform plan`: show what WOULD happen,
+# grouped into dependency stages, before anything is actually applied.
+#
+# Computed over the FULL dependency graph (not pre-filtered by
+# desired_state — see graph.py's docstring on why filtering before sorting
+# is wrong), then filtered per-stage for display only. This task file is
+# purely informational; the actual run still uses
+# execution_order_install/_cleanup from resolve_and_sort.yml, which are
+# entirely unaffected by anything computed here.
+
+- name: "Plan: compute leveled install/cleanup stages (full graph)"
+  ansible.builtin.set_fact:
+    _plan_install_stages: "{{ resolved_components | topological_levels('present') }}"
+    _plan_cleanup_stages: "{{ resolved_components | topological_levels('absent') }}"
+
+- name: "Plan: component names actually requested for install/cleanup"
+  ansible.builtin.set_fact:
+    _plan_install_names: >-
+      {{ resolved_components | dict2items
+         | selectattr('value.spec.desired_state', 'equalto', 'present')
+         | map(attribute='key') | list }}
+    _plan_cleanup_names: >-
+      {{ resolved_components | dict2items
+         | selectattr('value.spec.desired_state', 'equalto', 'absent')
+         | map(attribute='key') | list }}
+
+- name: "Plan: filter each stage down to components actually being acted on"
+  ansible.builtin.set_fact:
+    _plan_install_display: >-
+      {{ _plan_install_stages | map('intersect', _plan_install_names) | select('length') | list }}
+    _plan_cleanup_display: >-
+      {{ _plan_cleanup_stages | map('intersect', _plan_cleanup_names) | select('length') | list }}
+
+- name: "Execution plan"
+  ansible.builtin.debug:
+    msg: "{{ _plan_text.split('\n') }}"
+  vars:
+    _plan_text: |-
+      ===== EXECUTION PLAN (requested action: {{ platform_action }}) =====
+
+      INSTALL ({{ _plan_install_names | length }} component(s) with desired_state=present):
+      {% if _plan_install_display | length == 0 %}
+        nothing to do
+      {% else %}
+      {% for stage in _plan_install_display %}
+        Stage {{ loop.index }}: {{ stage | join(', ') }}
+      {% endfor %}
+      {% endif %}
+
+      CLEANUP ({{ _plan_cleanup_names | length }} component(s) with desired_state=absent):
+      {% if _plan_cleanup_display | length == 0 %}
+        nothing to do
+      {% else %}
+      {% for stage in _plan_cleanup_display %}
+        Stage {{ loop.index }}: {{ stage | join(', ') }}
+      {% endfor %}
+      {% endif %}

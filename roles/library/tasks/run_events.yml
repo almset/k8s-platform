@@ -1,0 +1,71 @@
+---
+# component_name / component are set by run_component.yml
+# events_phase: install | cleanup   (set by run_component.yml)
+# events_hook:  pre | post          (set by run_component.yml)
+#
+# catalog.yml spec.events shape:
+#   events:
+#     install:
+#       post:
+#         - name: "notify slack"
+#           type: command            # command | shell
+#           cmd: "curl -sf https://hooks.example/…"
+#     cleanup:
+#       pre:
+#         - name: "drain traffic"
+#           type: shell
+#           cmd: "kubectl cordon …"
+
+- name: "{{ component_name }}/{{ events_phase }}/{{ events_hook }}: check if this hook is supported by contract"
+  ansible.builtin.set_fact:
+    _events_supported: >-
+      {{
+        component.contract.events is defined and
+        component.contract.events[events_phase] is defined and
+        component.contract.events[events_phase][events_hook] | default(false) | bool
+      }}
+
+- name: "{{ component_name }}/{{ events_phase }}/{{ events_hook }}: collect declared events from catalog"
+  ansible.builtin.set_fact:
+    _events_list: >-
+      {{
+        (component.spec.events[events_phase][events_hook] | default([]))
+        if (component.spec.events is defined
+            and component.spec.events[events_phase] is defined)
+        else []
+      }}
+  when: _events_supported
+
+- name: "{{ component_name }}/{{ events_phase }}/{{ events_hook }}: warn if catalog declares events the contract doesn't support"
+  ansible.builtin.debug:
+    msg: >-
+      {{ component_name }}: catalog.yml declares spec.events.{{ events_phase }}.{{ events_hook }}
+      but vars/main.yml contract.events.{{ events_phase }}.{{ events_hook }} is not true —
+      these events will be SKIPPED.
+  when:
+    - not _events_supported
+    - component.spec.events is defined
+    - component.spec.events[events_phase] is defined
+    - component.spec.events[events_phase][events_hook] | default([]) | length > 0
+
+- name: "{{ component_name }}/{{ events_phase }}/{{ events_hook }}: run declared events (command)"
+  ansible.builtin.command: "{{ event.cmd }}"
+  loop: "{{ _events_list | default([]) }}"
+  loop_control:
+    loop_var: event
+    label: "{{ event.name | default(event.cmd) }}"
+  when:
+    - _events_supported
+    - event.type | default('command') == 'command'
+  changed_when: true
+
+- name: "{{ component_name }}/{{ events_phase }}/{{ events_hook }}: run declared events (shell)"
+  ansible.builtin.shell: "{{ event.cmd }}"  # noqa: command-instead-of-shell
+  loop: "{{ _events_list | default([]) }}"
+  loop_control:
+    loop_var: event
+    label: "{{ event.name | default(event.cmd) }}"
+  when:
+    - _events_supported
+    - event.type | default('command') == 'shell'
+  changed_when: true

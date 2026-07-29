@@ -1,0 +1,17 @@
+---
+# lifecycle_action: install | cleanup   (set by caller)
+# execution_order:  ordered list of component names (set by caller, already
+#                    topologically sorted for this direction)
+
+- name: "Run {{ lifecycle_action }} for each component in dependency order"
+  ansible.builtin.include_tasks: run_component.yml
+  vars:
+    component_name: "{{ item }}"
+    component: "{{ resolved_components[item] }}"
+  loop: "{{ execution_order }}"
+  loop_control:
+    label: "{{ item }} ({{ lifecycle_action }})"
+  when: >-
+    (lifecycle_action == 'install' and resolved_components[item].spec.desired_state == 'present')
+    or
+    (lifecycle_action == 'cleanup' and resolved_components[item].spec.desired_state == 'absent')

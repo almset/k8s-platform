@@ -1,0 +1,6 @@
+---
+platform_components:
+  metrics_server:
+    desired_state: present
+    values_overrides:
+      replicas: 2

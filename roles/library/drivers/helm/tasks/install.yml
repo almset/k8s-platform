@@ -1,0 +1,45 @@
+---
+# component_name / component / phase are set by run_phase.yml
+
+- name: "{{ component_name }}: add helm repository {{ component.spec.repository.alias | default('') }}"
+  kubernetes.core.helm_repository:
+    name: "{{ component.spec.repository.alias }}"
+    repo_url: "{{ component.spec.repository.url }}"
+  when: component.spec.repository is defined
+
+- name: "{{ component_name }}: create target namespace"
+  kubernetes.core.k8s:
+    api_version: v1
+    kind: Namespace
+    name: "{{ component.spec.chart.namespace | default('default') }}"
+    state: present
+  when: component.spec.chart.namespace is defined
+
+- name: "{{ component_name }}: helm install/upgrade {{ component.spec.chart.name }}"
+  kubernetes.core.helm:
+    name: "{{ component.spec.chart.release_name | default(component_name) }}"
+    chart_ref: >-
+      {{
+        (component.spec.repository.alias ~ '/' ~ component.spec.chart.name)
+        if component.spec.repository is defined
+        else component.spec.chart.name
+      }}
+    chart_version: "{{ component.spec.chart.version | default(omit) }}"
+    release_namespace: "{{ component.spec.chart.namespace | default('default') }}"
+    create_namespace: false
+    values: "{{ component.spec.values | default({}) }}"
+    atomic: "{{ component.spec.rollback.strategy | default('none') == 'atomic' }}"
+    wait: true
+  register: _helm_install_result
+
+- name: "{{ component_name }}: record helm release info for potential rollback"
+  ansible.builtin.set_fact:
+    resolved_components: >-
+      {{ resolved_components | combine({
+        component_name: resolved_components[component_name] | combine({
+          '_last_helm_result': {
+            'status': _helm_install_result.status | default({}),
+            'release': component.spec.chart.release_name | default(component_name)
+          }
+        }, recursive=True)
+      }) }}

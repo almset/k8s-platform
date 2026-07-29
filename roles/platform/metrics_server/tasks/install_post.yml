@@ -1,0 +1,18 @@
+---
+# Runs AFTER the driver (helm install) completes, because contract declares
+# phases.install.post_driver: true.
+# component_name / component are available here (set by run_phase.yml).
+
+- name: "{{ component_name }}: confirm metrics API is registered"
+  ansible.builtin.command: kubectl get apiservices v1beta1.metrics.k8s.io -o json
+  changed_when: false
+  register: _metrics_apiservice
+  failed_when: false
+
+- name: "{{ component_name }}: warn if metrics API is not yet available"
+  ansible.builtin.debug:
+    msg: >-
+      metrics-server was installed but v1beta1.metrics.k8s.io APIService is
+      not visible yet — this can take a minute on first install, `kubectl
+      top nodes` may fail until it appears.
+  when: _metrics_apiservice.rc != 0

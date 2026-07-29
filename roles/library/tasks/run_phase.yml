@@ -1,0 +1,39 @@
+---
+# component_name / component are set by run_component.yml
+# phase: install | cleanup | rollback   (set by caller)
+
+- name: "{{ component_name }}/{{ phase }}: resolve driver name"
+  ansible.builtin.set_fact:
+    driver_name: "{{ component.spec.driver }}"
+
+# Explicit capability contract instead of stat()-based file detection —
+# roles/library/drivers/<name>/driver.yml declares which phases the driver
+# actually implements. Pure data, loaded the same way component.yml is.
+- name: "{{ component_name }}/{{ phase }}: load driver capability contract"
+  ansible.builtin.include_vars:
+    file: "{{ role_path }}/drivers/{{ driver_name }}/driver.yml"
+    name: _driver_meta
+
+- name: "{{ component_name }}/{{ phase }}: execute plugin pre_driver logic"
+  ansible.builtin.include_tasks: "{{ role_path }}/../platform/{{ component_name }}/tasks/{{ phase }}_pre.yml"
+  when:
+    - component.contract.phases[phase] is defined
+    - component.contract.phases[phase].pre_driver | default(false) | bool
+
+# Drivers are now real roles (roles/library/drivers/<name>/tasks/<phase>.yml),
+# so include_role + tasks_from is the correct, idiomatic mechanism here —
+# unlike the earlier flat-file layout, the physical structure now actually
+# matches what include_role expects.
+- name: "{{ component_name }}/{{ phase }}: execute driver logic ({{ driver_name }})"
+  ansible.builtin.include_role:
+    name: "library/drivers/{{ driver_name }}"
+    tasks_from: "{{ phase }}"
+  when:
+    - component.contract.driver.enabled | default(true) | bool
+    - _driver_meta.driver_capabilities[phase] | default(false) | bool
+
+- name: "{{ component_name }}/{{ phase }}: execute plugin post_driver logic"
+  ansible.builtin.include_tasks: "{{ role_path }}/../platform/{{ component_name }}/tasks/{{ phase }}_post.yml"
+  when:
+    - component.contract.phases[phase] is defined
+    - component.contract.phases[phase].post_driver | default(false) | bool

@@ -1,0 +1,40 @@
+---
+platform_catalog:
+  metrics_server:
+    apiVersion: platform.io/v1
+    kind: Component
+    metadata:
+      name: metrics_server
+    spec:
+      driver: helm
+      repository:
+        type: helm
+        alias: metrics-server
+        url: https://kubernetes-sigs.github.io/metrics-server/
+      chart:
+        name: metrics-server
+        version: "3.12.1"
+        release_name: metrics-server
+        namespace: kube-system
+      dependencies: []
+      optional_dependencies: []
+      rollback:
+        strategy: atomic
+      events:
+        install:
+          post:
+            - name: "notify install complete"
+              type: command
+              cmd: "echo metrics_server installed"
+      checks:
+        - type: rollout
+          kind: Deployment
+          namespace: kube-system
+          name: metrics-server
+          timeout: 180
+        - type: object
+          kind: APIService
+          name: v1beta1.metrics.k8s.io
+          timeout: 60
+      compatibility:
+        - ">=1.26"

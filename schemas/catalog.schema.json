@@ -1,0 +1,87 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Platform Catalog",
+  "description": "catalog.yml — WHAT must be installed and how components relate to each other.",
+  "type": "object",
+  "required": ["platform_catalog"],
+  "properties": {
+    "platform_catalog": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["apiVersion", "kind", "metadata", "spec"],
+        "properties": {
+          "apiVersion": { "type": "string", "enum": ["platform.io/v1"] },
+          "kind": { "type": "string", "enum": ["Component"] },
+          "metadata": {
+            "type": "object",
+            "required": ["name"],
+            "properties": {
+              "name": { "type": "string" }
+            }
+          },
+          "spec": {
+            "type": "object",
+            "required": ["driver", "dependencies", "compatibility"],
+            "properties": {
+              "driver": { "type": "string" },
+              "repository": {
+                "type": "object",
+                "properties": {
+                  "type": { "type": "string" },
+                  "alias": { "type": "string" },
+                  "url": { "type": "string", "format": "uri" }
+                }
+              },
+              "chart": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "version": { "type": "string" },
+                  "release_name": { "type": "string" },
+                  "namespace": { "type": "string" }
+                }
+              },
+              "dependencies": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "optional_dependencies": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "rollback": {
+                "type": "object",
+                "properties": {
+                  "strategy": {
+                    "type": "string",
+                    "enum": ["atomic", "manual", "none"]
+                  }
+                }
+              },
+              "events": { "type": "object" },
+              "checks": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["type", "name"],
+                  "properties": {
+                    "type": { "type": "string", "enum": ["rollout", "object"] },
+                    "kind": { "type": "string" },
+                    "namespace": { "type": "string" },
+                    "name": { "type": "string" },
+                    "timeout": { "type": "integer" }
+                  }
+                }
+              },
+              "compatibility": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,42 @@
+---
+# component_name / component are set by run_component.yml
+#
+# catalog.yml spec.checks shape:
+#   checks:
+#     - type: rollout
+#       kind: Deployment
+#       namespace: kube-system
+#       name: metrics-server
+#       timeout: 180
+#     - type: object
+#       kind: APIService
+#       name: v1beta1.metrics.k8s.io
+#       timeout: 60
+#
+# check_handlers (roles/library/defaults/main.yml) maps check.type -> task
+# file under roles/library/tasks/. Extensible: add a new type by adding a
+# wait_<x>.yml file and a matching entry to check_handlers — no changes
+# needed here. Unlike a silent-skip design, an unrecognised type FAILS
+# loudly at validation time (schemas/catalog.schema.json also enums the
+# allowed types, so a typo is caught before this ever runs).
+
+- name: "{{ component_name }}: assert every declared check has a registered handler"
+  ansible.builtin.assert:
+    that:
+      - item.type in check_handlers
+    fail_msg: >-
+      {{ component_name }}: check type '{{ item.type }}' has no entry in
+      check_handlers (roles/library/defaults/main.yml). Either fix the typo
+      in catalog.yml, or add a wait_{{ item.type }}.yml handler and register
+      it in check_handlers.
+  loop: "{{ component.spec.checks }}"
+  loop_control:
+    label: "{{ item.type }}/{{ item.kind | default('') }}/{{ item.name }}"
+
+- name: "{{ component_name }}: run declarative checks"
+  ansible.builtin.include_tasks: "{{ check_handlers[item.type] }}.yml"
+  vars:
+    check: "{{ item }}"
+  loop: "{{ component.spec.checks }}"
+  loop_control:
+    label: "{{ item.type }}/{{ item.kind | default('') }}/{{ item.name }}"

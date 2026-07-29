@@ -1,0 +1,55 @@
+---
+- name: "Assert contract shape for {{ component_item.key }}"
+  ansible.builtin.assert:
+    that:
+      - component_item.value.contract is defined
+      - component_item.value.contract.apiVersion is defined
+      - component_item.value.contract.apiVersion == 'platform.io/v1'
+      - component_item.value.contract.driver is defined
+      - component_item.value.contract.driver.enabled is defined
+      - component_item.value.contract.phases is defined
+      - component_item.value.contract.phases.install is defined
+      - component_item.value.contract.phases.cleanup is defined
+    fail_msg: >-
+      Contract validation failed for {{ component_item.key }}. Ensure
+      roles/platform/{{ component_item.key }}/component.yml's 'contract:'
+      section follows schemas/contract.schema.json.
+
+# Symmetric with the driver-phase check in run_phase.yml: a component that
+# declares pre_driver/post_driver = true for a phase MUST ship the matching
+# tasks/<phase>_pre.yml / <phase>_post.yml file, or execution fails later
+# with an opaque "could not find task file" error instead of a clear one
+# at validation time.
+- name: "Determine which plugin task files {{ component_item.key }} must ship"
+  ansible.builtin.set_fact:
+    _required_plugin_task_files: >-
+      {{
+        (component_item.value.contract.phases | dict2items | selectattr('value.pre_driver', 'defined')
+          | selectattr('value.pre_driver') | map(attribute='key') | map('regex_replace', '^(.*)$', '\1_pre') | list)
+        +
+        (component_item.value.contract.phases | dict2items | selectattr('value.post_driver', 'defined')
+          | selectattr('value.post_driver') | map(attribute='key') | map('regex_replace', '^(.*)$', '\1_post') | list)
+      }}
+
+- name: "Check declared plugin task files exist for {{ component_item.key }}"
+  ansible.builtin.stat:
+    path: "{{ role_path }}/../platform/{{ component_item.key }}/tasks/{{ plugin_file }}.yml"
+  loop: "{{ _required_plugin_task_files }}"
+  loop_control:
+    loop_var: plugin_file
+  register: _plugin_task_stat
+
+- name: "Assert declared plugin task files exist for {{ component_item.key }}"
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+    fail_msg: >-
+      {{ component_item.key }}: component.yml declares
+      phases.*.pre_driver/post_driver = true, but
+      roles/platform/{{ component_item.key }}/tasks/{{ item.plugin_file }}.yml
+      does not exist. Either create the file or set the flag to false.
+      (scripts/generate_component.py creates matching stub files
+      automatically — this should not normally happen by hand.)
+  loop: "{{ _plugin_task_stat.results }}"
+  loop_control:
+    label: "{{ item.plugin_file }}"

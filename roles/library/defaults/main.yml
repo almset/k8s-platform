@@ -1,0 +1,33 @@
+---
+# What the operator wants installed/removed for this run.
+# Overridden per-environment in inventory/<env>/group_vars/platform.yml
+#
+# platform_components:
+#   metrics_server:
+#     desired_state: present   # present | absent
+#     values_overrides: {}     # deep-merged over roles/platform/<name>/component.yml's 'defaults'
+platform_components: {}
+
+# Action requested for this run: plan | install | cleanup
+# Passed on the CLI as -e platform_action=install
+# Defaults to 'plan' so a bare `ansible-playbook site.yml` with no -e flags
+# is always a dry run, never an accidental apply.
+platform_action: plan
+
+# Fail the whole run if catalog/contract schema validation fails.
+# Kept true by default; only flip for local debugging.
+platform_strict_validation: true
+
+# The engine always prints an execution plan before doing anything. Actually
+# applying it (install/cleanup) additionally requires this to be explicitly
+# true — `-e platform_confirm=true`. `-e platform_action=plan` always just
+# shows the plan and stops, regardless of this flag.
+platform_confirm: false
+
+# Maps a catalog.yml `checks[].type` to the roles/library/tasks/<file>.yml
+# that implements it. To add a new check type: write wait_<x>.yml, register
+# it here, and add "<x>" to the enum in schemas/catalog.schema.json's
+# checks[].type — run_checks.yml fails loudly on any type not listed here.
+check_handlers:
+  rollout: wait_rollout
+  object: wait_object

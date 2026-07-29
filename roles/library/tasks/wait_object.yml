@@ -1,0 +1,13 @@
+---
+# component_name / component are set by run_component.yml
+# check: {type: object, kind, name, namespace?, timeout?}   (set by run_checks.yml)
+
+- name: "{{ component_name }}: wait for object {{ check.kind }}/{{ check.name }} to exist"
+  kubernetes.core.k8s_info:
+    kind: "{{ check.kind }}"
+    name: "{{ check.name }}"
+    namespace: "{{ check.namespace | default(omit) }}"
+  register: _object_info
+  until: _object_info.resources | default([]) | length > 0
+  retries: "{{ ((check.timeout | default(60)) / 5) | round(0, 'ceil') | int }}"
+  delay: 5

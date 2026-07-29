@@ -1,0 +1,48 @@
+---
+# Единый файл метаданных компонента. Загружается ЯВНО через
+# ansible.builtin.include_vars (roles/library/tasks/resolve_and_sort.yml) —
+# никакого include_role, никакого tasks/main.yml, никаких побочных эффектов
+# от автозагрузки ролевых переменных. Если однажды кто-то допишет в
+# tasks/install_post.yml реальную логику — стадия построения графа этого
+# даже не увидит, потому что она вообще не выполняет ни одного таска этой
+# роли, только читает YAML.
+
+defaults:
+  # ЗНАЧЕНИЯ конфигурации. Сюда попадает то, что оператор может переопределить
+  # через values_overrides в inventory/<env>/group_vars/platform.yml.
+  spec:
+    values:
+      replicas: 1
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+      args:
+        - --kubelet-insecure-tls
+
+contract:
+  # КОНТРАКТ с движком — как компонент взаимодействует с Engine.
+  # Валидируется по schemas/contract.schema.json.
+  apiVersion: platform.io/v1
+
+  driver:
+    enabled: true
+
+  phases:
+    install:
+      pre_driver: false
+      post_driver: true   # requires tasks/install_post.yml — ships alongside this file
+    cleanup:
+      pre_driver: false
+      post_driver: true   # requires tasks/cleanup_post.yml — ships alongside this file
+    rollback:
+      pre_driver: false
+      post_driver: false
+
+  events:
+    install:
+      pre: false
+      post: true
+    cleanup:
+      pre: false
+      post: false

@@ -1,0 +1,106 @@
+---
+# This whole play runs on hosts: localhost (see site.yml) — there is exactly
+# one host in the run, so there is no "run_once doesn't share facts across
+# hosts" problem to work around. Do NOT reintroduce run_once here as a
+# substitute for that guarantee; if this role is ever included in a
+# multi-host play, computing resolved_components here will silently be
+# undefined on every host but the first.
+
+- name: Assert catalog was loaded
+  ansible.builtin.assert:
+    that:
+      - platform_catalog is defined
+      - platform_catalog | length > 0
+    fail_msg: >-
+      platform_catalog is empty or undefined. Did you forget to
+      `include_vars: catalog.yml` before this role, or is catalog.yml empty?
+
+- name: Assert every requested component exists in the catalog
+  ansible.builtin.assert:
+    that:
+      - item.key in platform_catalog
+    fail_msg: >-
+      Component '{{ item.key }}' is listed in platform_components but has
+      no entry in catalog.yml.
+  loop: "{{ platform_components | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+# Explicit metadata loading — no include_role, no tasks/main.yml, no hidden
+# coupling between "build the dependency graph" and "execute role tasks".
+# component.yml is pure data; include_vars only ever parses YAML into a
+# fact, it can never accidentally run logic even if someone later adds real
+# tasks elsewhere in that role.
+- name: Load component.yml metadata explicitly for each requested component
+  ansible.builtin.include_vars:
+    file: "{{ role_path }}/../platform/{{ item.key }}/component.yml"
+    name: "_component_meta_{{ item.key }}"
+  loop: "{{ platform_components | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  when: item.key in platform_catalog
+
+- name: Assert component.yml defines both 'defaults' and 'contract'
+  ansible.builtin.assert:
+    that:
+      - vars['_component_meta_' ~ item.key] is defined
+      - vars['_component_meta_' ~ item.key].contract is defined
+    fail_msg: >-
+      roles/platform/{{ item.key }}/component.yml must define a top-level
+      'contract:' key (and normally 'defaults:' too). This is almost always
+      a typo or a copy-pasted component.yml that wasn't filled in. (Run
+      scripts/generate_component.py {{ item.key }} to scaffold it correctly.)
+  loop: "{{ platform_components | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: Build fully resolved components
+  ansible.builtin.set_fact:
+    resolved_components: >-
+      {{
+        resolved_components | default({}) | combine({
+          item.key:
+            (vars['_component_meta_' ~ item.key].defaults | default({})) |
+            combine(platform_catalog[item.key], recursive=True) |
+            combine({
+              'metadata': {'name': item.key},
+              'spec': {
+                'desired_state': item.value.desired_state,
+                'values': (platform_catalog[item.key].spec.values | default({})) |
+                          combine(item.value.values_overrides | default({}), recursive=True)
+              },
+              'contract': vars['_component_meta_' ~ item.key].contract
+            }, recursive=True)
+        })
+      }}
+  loop: "{{ platform_components | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+
+- name: Validate catalog entries against catalog.schema.json
+  ansible.builtin.include_tasks: validate_catalog_entry.yml
+  loop: "{{ resolved_components | dict2items }}"
+  loop_control:
+    loop_var: component_item
+    label: "{{ component_item.key }}"
+
+- name: Validate component contracts against contract.schema.json
+  ansible.builtin.include_tasks: validate_contract.yml
+  loop: "{{ resolved_components | dict2items }}"
+  loop_control:
+    loop_var: component_item
+    label: "{{ component_item.key }}"
+
+- name: Calculate execution order for installation (dependencies first)
+  ansible.builtin.set_fact:
+    execution_order_install: "{{ resolved_components | topological_sort('present') }}"
+
+- name: Calculate execution order for cleanup (dependents first)
+  ansible.builtin.set_fact:
+    execution_order_cleanup: "{{ resolved_components | topological_sort('absent') }}"
+
+- name: Show resolved execution order
+  ansible.builtin.debug:
+    msg:
+      install: "{{ execution_order_install }}"
+      cleanup: "{{ execution_order_cleanup }}"

@@ -1,0 +1,16 @@
+---
+# Runs AFTER the driver (helm uninstall) completes, because contract
+# declares phases.cleanup.post_driver: true.
+
+- name: "{{ component_name }}: verify no leftover metrics-server pods"
+  ansible.builtin.command: >-
+    kubectl get pods -n {{ component.spec.chart.namespace | default('kube-system') }}
+    -l app.kubernetes.io/name=metrics-server -o name
+  changed_when: false
+  register: _leftover_pods
+  failed_when: false
+
+- name: "{{ component_name }}: warn about leftover pods"
+  ansible.builtin.debug:
+    msg: "Leftover metrics-server pods after uninstall: {{ _leftover_pods.stdout_lines }}"
+  when: _leftover_pods.stdout_lines | default([]) | length > 0

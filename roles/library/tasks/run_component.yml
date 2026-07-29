@@ -1,0 +1,51 @@
+---
+# component_name / component / lifecycle_action are set by execute_lifecycle.yml
+
+- name: "{{ component_name }}: run pre-events"
+  ansible.builtin.include_tasks: run_events.yml
+  vars:
+    events_phase: "{{ lifecycle_action }}"
+    events_hook: pre
+
+- name: "{{ component_name }}: run {{ lifecycle_action }} phase"
+  block:
+    - name: "{{ component_name }}: execute {{ lifecycle_action }} phase"
+      ansible.builtin.include_tasks: run_phase.yml
+      vars:
+        phase: "{{ lifecycle_action }}"
+
+    - name: "{{ component_name }}: run checks"
+      ansible.builtin.include_tasks: run_checks.yml
+      when:
+        - lifecycle_action == 'install'
+        - component.spec.checks is defined
+        - component.spec.checks | length > 0
+
+  rescue:
+    - name: "{{ component_name }}: install/checks failed — evaluate rollback strategy"
+      ansible.builtin.debug:
+        msg: >-
+          {{ component_name }} failed during '{{ lifecycle_action }}'.
+          rollback.strategy = {{ component.spec.rollback.strategy | default('none') }}
+
+    - name: "{{ component_name }}: execute rollback phase"
+      ansible.builtin.include_tasks: run_phase.yml
+      vars:
+        phase: rollback
+      when:
+        - lifecycle_action == 'install'
+        - component.spec.rollback is defined
+        - component.spec.rollback.strategy | default('none') != 'none'
+        - component.contract.phases.rollback is defined
+
+    - name: "{{ component_name }}: fail the run after rollback handling"
+      ansible.builtin.fail:
+        msg: >-
+          {{ component_name }}: '{{ lifecycle_action }}' failed. See task
+          output above for the original error and rollback outcome.
+
+- name: "{{ component_name }}: run post-events"
+  ansible.builtin.include_tasks: run_events.yml
+  vars:
+    events_phase: "{{ lifecycle_action }}"
+    events_hook: post

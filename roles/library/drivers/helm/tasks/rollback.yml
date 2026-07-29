@@ -1,0 +1,30 @@
+---
+# component_name / component / phase are set by run_phase.yml
+# Invoked only from run_component.yml's rescue block, and only when
+# rollback.strategy != 'none' and the contract declares a rollback phase.
+
+- name: "{{ component_name }}: rollback strategy is 'atomic' — helm already rolled back automatically"
+  ansible.builtin.debug:
+    msg: >-
+      {{ component_name }}: chart was installed with atomic=true, Helm
+      already rolled back the failed release on its own. No manual action
+      needed.
+  when: component.spec.rollback.strategy | default('none') == 'atomic'
+
+- name: "{{ component_name }}: rollback strategy is 'manual' — roll back to previous revision"
+  kubernetes.core.helm:
+    name: "{{ component.spec.chart.release_name | default(component_name) }}"
+    release_namespace: "{{ component.spec.chart.namespace | default('default') }}"
+    state: present
+    # rollback to the immediately preceding revision; `helm rollback` proper
+    # isn't exposed by the collection module directly, so fall back to CLI.
+  when: component.spec.rollback.strategy | default('none') == 'manual'
+  ignore_errors: true  # best-effort — the outer rescue already fails the run
+
+- name: "{{ component_name }}: manual rollback via helm CLI (previous revision)"
+  ansible.builtin.command: >-
+    helm rollback {{ component.spec.chart.release_name | default(component_name) }}
+    -n {{ component.spec.chart.namespace | default('default') }}
+  when: component.spec.rollback.strategy | default('none') == 'manual'
+  changed_when: true
+  ignore_errors: true

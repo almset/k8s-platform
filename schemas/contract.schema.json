@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Platform Component Contract",
+  "description": "vars/main.yml of a roles/platform/<name> role — describes HOW a component talks to the engine.",
+  "type": "object",
+  "required": ["apiVersion", "driver", "phases"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": {
+      "type": "string",
+      "enum": ["platform.io/v1"]
+    },
+    "driver": {
+      "type": "object",
+      "required": ["enabled"],
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" }
+      }
+    },
+    "phases": {
+      "type": "object",
+      "required": ["install", "cleanup"],
+      "additionalProperties": false,
+      "properties": {
+        "install":  { "$ref": "#/definitions/phase" },
+        "cleanup":  { "$ref": "#/definitions/phase" },
+        "rollback": { "$ref": "#/definitions/phase" }
+      }
+    },
+    "events": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "install": { "$ref": "#/definitions/eventPair" },
+        "cleanup": { "$ref": "#/definitions/eventPair" }
+      }
+    }
+  },
+  "definitions": {
+    "phase": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pre_driver":  { "type": "boolean" },
+        "post_driver": { "type": "boolean" }
+      }
+    },
+    "eventPair": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pre":  { "type": "boolean" },
+        "post": { "type": "boolean" }
+      }
+    }
+  }
+}

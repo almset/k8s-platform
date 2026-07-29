@@ -1,0 +1,9 @@
+---
+# component_name / component / phase are set by run_phase.yml
+
+- name: "{{ component_name }}: helm uninstall {{ component.spec.chart.release_name | default(component_name) }}"
+  kubernetes.core.helm:
+    name: "{{ component.spec.chart.release_name | default(component_name) }}"
+    release_namespace: "{{ component.spec.chart.namespace | default('default') }}"
+    state: absent
+    wait: true

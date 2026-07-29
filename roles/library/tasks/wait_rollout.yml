@@ -1,0 +1,14 @@
+---
+# component_name / component are set by run_component.yml
+# check: {type: rollout, kind, name, namespace?, timeout?}   (set by run_checks.yml)
+
+- name: "{{ component_name }}: wait for rollout of {{ check.kind }}/{{ check.name }}"
+  ansible.builtin.command: >-
+    kubectl rollout status {{ check.kind | lower }}/{{ check.name }}
+    {{ '-n ' + check.namespace if check.namespace is defined else '' }}
+    --timeout={{ check.timeout | default(180) }}s
+  changed_when: false
+  register: _rollout_status
+  until: _rollout_status.rc == 0
+  retries: 1
+  delay: 0

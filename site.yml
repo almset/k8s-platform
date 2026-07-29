@@ -1,0 +1,10 @@
+---
+# Runs entirely on localhost/control node (kubeconfig + helm binary live
+# here). See README.md "Почему localhost" for why this replaced the
+# original run_once-based approach.
+- name: Platform engine
+  hosts: platform
+  connection: local
+  gather_facts: false
+  roles:
+    - library
